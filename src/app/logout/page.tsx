@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 export default function SmartroomLibrary() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
   const [poolCount, setPoolCount] = useState(0);
   const [snookerCount, setSnookerCount] = useState(0);
   const [tableLoading, setTableLoading] = useState(true);
@@ -14,17 +15,22 @@ export default function SmartroomLibrary() {
     const token = localStorage.getItem("token");
     setIsLoggedIn(!!token);
 
+    // ✅ ดึงข้อมูลโต๊ะจาก backend
     fetch("http://localhost:3001/api/v1/table/guest/tables")
-      .then((res) => res.json())
-      .then((result) => {
+      .then(res => res.json())
+      .then(result => {
         const tables = result.data || [];
+
         setPoolCount(tables.filter((t: any) => t.type === "POOL").length);
-        setSnookerCount(tables.filter((t: any) => t.type === "SNOOKER").length);
+        setSnookerCount(
+          tables.filter((t: any) => t.type === "SNOOKER").length
+        );
+
         setTableLoading(false);
       })
-      .catch((err) => {
+      .catch(err => {
         console.error("Fetch Error:", err);
-        setTimeout(() => setTableLoading(false), 1500);
+        setTableLoading(false);
       });
   }, []);
 
@@ -83,28 +89,16 @@ export default function SmartroomLibrary() {
                   </button>
                 </>
               ) : (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => router.push("/reservationlist")}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                    </svg>
-                    ดูการจองของฉัน
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem("token");
-                      setIsLoggedIn(false);
-                      router.push("/logout");
-                    }}
-                    className="px-4 sm:px-6 py-2 sm:py-2.5 bg-red-600 text-white text-sm sm:text-base rounded-xl hover:bg-red-700 hover:scale-105 transition-all font-semibold shadow-sm duration-200"
-                  >
-                    ออกจากระบบ
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("token");
+                    setIsLoggedIn(false);
+                    router.push("/logout");
+                  }}
+                  className="px-4 sm:px-6 py-2 sm:py-2.5 bg-red-600 text-white text-sm sm:text-base rounded-xl hover:bg-red-700 transition-colors font-semibold shadow-sm"
+                >
+                  ออกจากระบบ
+                </button>
               )}
             </div>
           </div>
@@ -113,6 +107,8 @@ export default function SmartroomLibrary() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        
+        {/* Page Title */}
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-600 rounded-full flex items-center justify-center shadow-sm">
@@ -127,12 +123,14 @@ export default function SmartroomLibrary() {
           </p>
         </div>
 
+        {/* Campus Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-12">
           {campuses.map((campus) => (
             <div
               key={campus.name}
               className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-200"
             >
+              {/* Campus Header */}
               <div className="bg-blue-600 px-6 py-6 sm:py-8 text-center">
                 <div className="text-4xl sm:text-5xl mb-3">{campus.emoji}</div>
                 <h2 className="text-xl sm:text-2xl font-bold text-white">
@@ -140,7 +138,9 @@ export default function SmartroomLibrary() {
                 </h2>
               </div>
 
+              {/* Room Count & Booking */}
               <div className="px-6 py-8">
+                {/* Room Count Display */}
                 <div className="mb-6 text-center">
                   <div className="mb-4">
                     <span className="text-5xl sm:text-6xl font-bold text-gray-800">
@@ -150,9 +150,10 @@ export default function SmartroomLibrary() {
                   </div>
                 </div>
 
+                {/* Booking Button */}
                 <button
                   onClick={() => handleBooking(campus.name)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 hover:scale-105 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-colors shadow-sm"
                 >
                   จองโต๊ะ {campus.name}
                 </button>
@@ -161,6 +162,7 @@ export default function SmartroomLibrary() {
           ))}
         </div>
 
+        {/* Login Prompt */}
         {!isLoggedIn && (
           <div className="max-w-2xl mx-auto">
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 sm:p-8 text-center">
