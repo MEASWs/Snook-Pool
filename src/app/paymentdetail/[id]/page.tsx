@@ -4,12 +4,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+// ---------- ENV ----------
+const API = process.env.NEXT_PUBLIC_API_DOMAIN as string;
+
 // ---------- Types ----------
 type PaymentDetail = {
   id: string;
   status: "PENDING" | "PAID" | "CANCELLED" | string;
   amount: number;
-  method: "CASH" | "WALLET_BALANCE" | "BANK_TRANSFER" | "QR_PAYMENT" | string;
+  method:
+  | "CASH"
+  | "WALLET_BALANCE"
+  | "BANK_TRANSFER"
+  | "QR_PAYMENT"
+  | string;
   createdAt?: string;
   paidAt?: string | null;
 };
@@ -46,13 +54,19 @@ export default function PaymentDetailPage() {
       setError("");
 
       const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : null;
 
       try {
-        // 1) พยายามเรียกเส้น detail โดยตรง
+        // 1) ยิง detail ตรงๆ ก่อน
         const res = await fetch(
-          `http://localhost:3001/api/v1/payment/authorized/payments/${paymentId}`,
-          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          `${API}/api/v1/payment/authorized/payments/${paymentId}`,
+          {
+            headers: token
+              ? { Authorization: `Bearer ${token}` }
+              : {},
+          }
         ).catch(() => null);
 
         if (res && res.ok) {
@@ -62,17 +76,22 @@ export default function PaymentDetailPage() {
             normalizeFromDetail(data);
           if (!cancel) setPayment(p);
         } else {
-          // 2) fallback: ดึงจาก /my แล้วหา id ตรงกัน
+          // 2) fallback: /my แล้วหา id
           const resMy = await fetch(
-            `http://localhost:3001/api/v1/payment/authorized/my`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            `${API}/api/v1/payment/authorized/my`,
+            {
+              headers: token
+                ? { Authorization: `Bearer ${token}` }
+                : {},
+            }
           );
           const dataMy = await safeJSON(resMy);
 
           if (!resMy.ok) {
             if (!cancel)
               setError(
-                dataMy?.message || `โหลดข้อมูลไม่สำเร็จ (HTTP ${resMy.status})`
+                dataMy?.message ||
+                `โหลดข้อมูลไม่สำเร็จ (HTTP ${resMy.status})`
               );
           } else {
             const found = (dataMy?.data as any[] | undefined)?.find(
@@ -82,7 +101,10 @@ export default function PaymentDetailPage() {
           }
         }
       } catch (e: any) {
-        if (!cancel) setError(e?.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+        if (!cancel)
+          setError(
+            e?.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล"
+          );
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -97,95 +119,159 @@ export default function PaymentDetailPage() {
   // --- UI ---
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <main className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <main className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-6">
-        <div className="flex items-center justify-between mb-6">
+        {/* Header / Actions */}
+        <header className="flex items-center justify-between mb-6">
           <button
             onClick={() => router.back()}
-            className="text-gray-600 hover:text-gray-900 flex items-center gap-2"
+            className="text-gray-600 hover:text-gray-900 flex items-center gap-2 hover:translate-x-[-6px] transition-all"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
-            กลับ
+            <span className="font-medium text-sm">
+              กลับ
+            </span>
           </button>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => copyText(paymentId)}
-              className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm"
+              className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs sm:text-sm font-medium"
             >
               คัดลอกเลขที่ชำระเงิน
             </button>
             <button
               onClick={() => window.print()}
-              className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm"
+              className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 text-xs sm:text-sm font-medium"
             >
               พิมพ์ใบเสร็จ
             </button>
           </div>
-        </div>
+        </header>
 
-        <h1 className="text-2xl font-bold mb-2">รายละเอียดการชำระเงิน</h1>
-        <p className="text-gray-500 mb-6">
-          หมายเลขการชำระเงิน: <span className="font-medium">{paymentId}</span>
-        </p>
+        {/* Title */}
+        <section className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            รายละเอียดการชำระเงิน
+          </h1>
+          <p className="text-gray-500 text-sm">
+            หมายเลขการชำระเงิน:{" "}
+            <span className="font-medium text-gray-800">
+              {paymentId}
+            </span>
+          </p>
+        </section>
 
+        {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-sm mb-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-sm mb-6">
             {error}
           </div>
         )}
 
-        {/* Status */}
-        <div className="mb-6">
+        {/* Status + Cash note */}
+        <section className="mb-6 space-y-4">
           <StatusBadge status={payment?.status} />
-        </div>
 
-        {/* Amount & Method */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <InfoCard label="ยอดชำระ" value={fmtTHB(payment?.amount ?? 0)} />
-          <InfoCard label="วิธีชำระ" value={mapMethodTH(payment?.method)} />
-          <InfoCard label="วันที่สร้างรายการ" value={createdAtStr} />
-          <InfoCard label="วันที่ชำระ" value={paidAtStr} />
-        </div>
+          {payment?.method === "CASH" &&
+            payment?.status === "PENDING" && (
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800 leading-relaxed">
+                โปรดไปชำระเงินสดที่หน้าร้าน และแจ้ง
+                <br />
+                <span className="font-semibold">
+                  หมายเลขการชำระเงิน: {paymentId}
+                </span>
+                <br />
+                ให้พนักงานเพื่อยืนยันการชำระ
+              </div>
+            )}
+        </section>
 
-        {/* Next Actions */}
-        <div className="flex">
+        {/* Summary Cards */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <InfoCard
+            label="ยอดชำระ"
+            value={fmtTHB(payment?.amount ?? 0)}
+          />
+          <InfoCard
+            label="วิธีชำระ"
+            value={mapMethodTH(payment?.method)}
+          />
+          <InfoCard
+            label="วันที่สร้างรายการ"
+            value={createdAtStr}
+          />
+          <InfoCard
+            label="วันที่ชำระ"
+            value={paidAtStr}
+          />
+        </section>
+
+        {/* Next step */}
+        <section className="flex">
           <button
             onClick={() => router.push("/reservationlist")}
-            className="px-4 py-3 rounded-xl bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200"
+            className="px-4 py-3 rounded-xl bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200 transition"
           >
-            กลับไปหน้ารายละเอียดการจอง
+            กลับไปหน้ารายการจอง
           </button>
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }
 
 // ---------- Components ----------
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-2xl border p-4">
       <div className="text-xs text-gray-500 mb-1">{label}</div>
-      <div className="text-base font-medium">{value}</div>
+      <div className="text-base font-medium text-gray-900">
+        {value}
+      </div>
     </div>
   );
 }
 
 function StatusBadge({ status }: { status?: string }) {
   const map = {
-    PAID: { text: "ชำระแล้ว", cls: "bg-green-50 text-green-700 border-green-200" },
-    PENDING: { text: "รอดำเนินการ", cls: "bg-yellow-50 text-yellow-800 border-yellow-200" },
-    CANCELLED: { text: "ยกเลิก", cls: "bg-gray-50 text-gray-600 border-gray-200" },
+    PAID: {
+      text: "ชำระแล้ว",
+      cls: "bg-green-50 text-green-700 border-green-200",
+    },
+    PENDING: {
+      text: "รอดำเนินการ",
+      cls: "bg-yellow-50 text-yellow-800 border-yellow-200",
+    },
+    CANCELLED: {
+      text: "ยกเลิก",
+      cls: "bg-gray-50 text-gray-600 border-gray-200",
+    },
   } as const;
 
   const conf =
@@ -195,14 +281,18 @@ function StatusBadge({ status }: { status?: string }) {
     };
 
   return (
-    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm border ${conf.cls}`}>
+    <span
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm border ${conf.cls}`}
+    >
       <Dot /> {conf.text}
     </span>
   );
 }
 
 function Dot() {
-  return <span className="inline-block w-2 h-2 rounded-full bg-current" />;
+  return (
+    <span className="inline-block w-2 h-2 rounded-full bg-current" />
+  );
 }
 
 // ---------- Utils ----------
@@ -217,12 +307,15 @@ async function safeJSON(res: Response | null) {
 
 function copyText(text: string) {
   if (!text) return;
-  navigator.clipboard?.writeText(text).catch(() => {});
+  navigator.clipboard?.writeText(text).catch(() => { });
 }
 
 function fmtTHB(n: number) {
   try {
-    return new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(n);
+    return new Intl.NumberFormat("th-TH", {
+      style: "currency",
+      currency: "THB",
+    }).format(n);
   } catch {
     return `${n} ฿`;
   }
@@ -257,8 +350,10 @@ function mapMethodTH(method?: string) {
   }
 }
 
-
-function normalizeFromCreateOrDetail(data: any): PaymentDetail | null {
+// --- normalizers ---
+function normalizeFromCreateOrDetail(
+  data: any
+): PaymentDetail | null {
   if (!data) return null;
   return {
     id: data.id,
@@ -287,4 +382,3 @@ function normalizeFromMy(item: any): PaymentDetail | null {
     paidAt: item.paidAt,
   };
 }
-

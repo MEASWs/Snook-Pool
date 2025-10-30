@@ -25,6 +25,9 @@ type PreviewResult = {
     total: number;
 };
 
+// --------- ENV BASE ---------
+const API = process.env.NEXT_PUBLIC_API_DOMAIN as string;
+
 export default function WalletPayPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -33,7 +36,7 @@ export default function WalletPayPage() {
     const [reservation, setReservation] = useState<Reservation | null>(null);
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
-    // โปรจากผล apply (ไม่มีปุ่มยกเลิกโปรแล้ว)
+    // โปรที่ถูก apply อัตโนมัติ (ไม่มีปุ่มถอด)
     const [promotions, setPromotions] = useState<Promotion[]>([]);
     const [preview, setPreview] = useState<PreviewResult | null>(null);
 
@@ -42,6 +45,7 @@ export default function WalletPayPage() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
 
+    // ถ้า backend เคยคำนวณ amount แล้ว ใช้อันนั้นก่อน
     const subtotalFallback = useMemo(() => {
         if (!reservation) return 0;
         if (typeof reservation.amount === "number") return reservation.amount;
@@ -50,7 +54,7 @@ export default function WalletPayPage() {
         return rate * hrs;
     }, [reservation]);
 
-    // โหลด reservation + wallet balance
+    // โหลดข้อมูล reservation + wallet
     useEffect(() => {
         let cancel = false;
 
@@ -65,16 +69,20 @@ export default function WalletPayPage() {
                 }
                 const token = localStorage.getItem("token");
 
-                // 1) reservation
+                // 1) GET reservation
                 const resResv = await fetch(
-                    `http://localhost:3001/api/v1/reservation/authorized/reservations/${reservationId}`,
+                    `${API}/api/v1/reservation/authorized/reservations/${reservationId}`,
                     { headers: token ? { Authorization: `Bearer ${token}` } : {} }
                 );
                 const resvData = await safeJSON(resResv);
                 if (!resResv.ok) {
-                    setError(resvData?.message || `โหลดข้อมูลการจองไม่สำเร็จ (HTTP ${resResv.status})`);
+                    setError(
+                        resvData?.message ||
+                            `โหลดข้อมูลการจองไม่สำเร็จ (HTTP ${resResv.status})`
+                    );
                     return;
                 }
+
                 const resv = resvData?.data as Reservation | undefined;
                 if (!resv) {
                     setError("ไม่พบข้อมูลการจอง");
@@ -82,15 +90,31 @@ export default function WalletPayPage() {
                 }
                 if (!cancel) setReservation(resv);
 
-                // 2) wallet balance
-                const resWallet = await fetch("http://localhost:3001/api/v1/wallet/authorized/balance", {
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
+                // 2) GET wallet balance
+                const resWallet = await fetch(
+                    `${API}/api/v1/wallet/authorized/balance`,
+                    {
+                        headers: token
+                            ? { Authorization: `Bearer ${token}` }
+                            : {},
+                    }
+                );
+
                 const walletData = await safeJSON(resWallet);
-                const balance = resWallet.ok ? (walletData?.data?.balance ?? walletData?.balance ?? null) : null;
-                if (!cancel) setWalletBalance(typeof balance === "number" ? balance : null);
+                const balance = resWallet.ok
+                    ? walletData?.data?.balance ??
+                      walletData?.balance ??
+                      null
+                    : null;
+                if (!cancel)
+                    setWalletBalance(
+                        typeof balance === "number" ? balance : null
+                    );
             } catch (e: any) {
-                if (!cancel) setError(e?.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+                if (!cancel)
+                    setError(
+                        e?.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล"
+                    );
             } finally {
                 if (!cancel) setLoading(false);
             }
@@ -102,7 +126,7 @@ export default function WalletPayPage() {
         };
     }, [reservationId]);
 
-    // พรีวิวส่วนลดด้วย /promotion/authorized/apply (ไม่มีตัวเลือกปิดโปร)
+    // พรีวิวโปร/ส่วนลด ที่จะถูก apply อัตโนมัติ
     useEffect(() => {
         let cancel = false;
 
@@ -113,41 +137,65 @@ export default function WalletPayPage() {
 
             try {
                 const token = localStorage.getItem("token");
-                const res = await fetch("http://localhost:3001/api/v1/promotion/authorized/apply", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                    body: JSON.stringify({ reservationId, method: "WALLET_BALANCE" }),
-                });
+                const res = await fetch(
+                    `${API}/api/v1/promotion/authorized/apply`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...(token
+                                ? { Authorization: `Bearer ${token}` }
+                                : {}),
+                        },
+                        body: JSON.stringify({
+                            reservationId,
+                            method: "WALLET_BALANCE",
+                        }),
+                    }
+                );
                 const data = await safeJSON(res);
 
                 if (res.ok && data) {
-                    const discountAmount = Number(data.discountAmount ?? 0);
-                    const finalAmount = Number(data.finalAmount ?? subtotalFallback);
-                    const subtotal = Number((finalAmount + discountAmount).toFixed(2));
+                    const discountAmount = Number(
+                        data.discountAmount ?? 0
+                    );
+                    const finalAmount = Number(
+                        data.finalAmount ?? subtotalFallback
+                    );
+                    // subtotal = total + discount
+                    const subtotalCalc = Number(
+                        (finalAmount + discountAmount).toFixed(2)
+                    );
 
                     if (!cancel) {
                         setPreview({
-                            subtotal: subtotal || subtotalFallback,
+                            subtotal: subtotalCalc || subtotalFallback,
                             discount: discountAmount,
                             total: finalAmount,
                         });
 
-                        // มีส่วนลด → แสดงว่า “จะถูกใช้ให้อัตโนมัติ”
+                        // ถ้ามีส่วนลด => แสดงโปร
                         if (discountAmount > 0) {
                             const name =
                                 data.rewardType === "FREE_HOUR"
                                     ? "ฟรี 1 ชั่วโมง (เฉพาะชำระด้วย Wallet)"
                                     : "ส่วนลดโปรโมชัน";
-                            const desc = data.message || "มีส่วนลดจากโปรโมชันที่ใช้ได้";
-                            setPromotions([{ id: "APPLY_RESULT", name, description: desc }]);
+                            const desc =
+                                data.message ||
+                                "มีส่วนลดจากโปรโมชันที่ใช้ได้";
+                            setPromotions([
+                                {
+                                    id: "APPLY_RESULT",
+                                    name,
+                                    description: desc,
+                                },
+                            ]);
                         } else {
                             setPromotions([]);
                         }
                     }
                 } else {
+                    // ไม่มีส่วนลดก็ไม่มีโปร แต่เรายังต้องมี preview ปลอดภัย
                     if (!cancel) {
                         setPreview({
                             subtotal: subtotalFallback,
@@ -176,34 +224,50 @@ export default function WalletPayPage() {
     }, [reservationId, reservation]);
 
     const total = preview?.total ?? subtotalFallback;
-    const canPay = typeof walletBalance === "number" ? walletBalance >= total : true;
+    const canPay =
+        typeof walletBalance === "number"
+            ? walletBalance >= total
+            : true; // ถ้ายังโหลด balance ไม่เสร็จ เราจะไม่บล็อกปุ่ม
 
-    const handleConfirmPay = async () => {
-        if (!reservationId) return setError("ไม่พบ reservationId");
+    async function handleConfirmPay() {
+        if (!reservationId) {
+            setError("ไม่พบ reservationId");
+            return;
+        }
         setSubmitting(true);
         setError("");
 
         try {
             const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:3001/api/v1/payment/authorized/payments", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify({
-                    reservationId,
-                    method: "WALLET_BALANCE",
-                }),
-            });
+            const res = await fetch(
+                `${API}/api/v1/payment/authorized/payments`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(token
+                            ? { Authorization: `Bearer ${token}` }
+                            : {}),
+                    },
+                    body: JSON.stringify({
+                        reservationId,
+                        method: "WALLET_BALANCE",
+                    }),
+                }
+            );
 
             const data = await safeJSON(res);
             if (!res.ok) {
-                setError(data?.message || `ชำระเงินไม่สำเร็จ (HTTP ${res.status})`);
+                setError(
+                    data?.message ||
+                        `ชำระเงินไม่สำเร็จ (HTTP ${res.status})`
+                );
                 return;
             }
 
-            const paymentId = data?.data?.id as string | undefined;
+            const paymentId = data?.data?.id as
+                | string
+                | undefined;
             if (!paymentId) {
                 setError("ไม่พบหมายเลขการชำระเงินจากระบบ");
                 return;
@@ -211,128 +275,221 @@ export default function WalletPayPage() {
 
             router.replace(`/paymentdetail/${paymentId}`);
         } catch (e: any) {
-            setError(e?.message || "เกิดข้อผิดพลาดในการชำระเงิน");
+            setError(
+                e?.message || "เกิดข้อผิดพลาดในการชำระเงิน"
+            );
         } finally {
             setSubmitting(false);
         }
-    };
+    }
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <main className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-            </div>
+            </main>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4">
-            <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-6">
-                <button onClick={() => router.back()} className="text-gray-600 hover:text-gray-900 mb-6 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    กลับ
-                </button>
-
-                <h1 className="text-2xl font-bold mb-2">ชำระเงินด้วยกระเป๋าเงิน (Wallet)</h1>
-                <p className="text-gray-500 mb-6">
-                    หมายเลขการจอง: <span className="font-medium">{reservationId}</span>
-                </p>
-
-                {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-sm mb-4">{error}</div>
-                )}
-
-                {/* สรุปการจอง */}
-                <div className="bg-blue-50 rounded-xl p-4 mb-6">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-gray-700">โต๊ะ</span>
-                        <span className="font-medium">
-                            {reservation?.table ? `#${reservation.table.number} (${reservation.table.type})` : "-"}
+        <main className="min-h-screen bg-gray-50 py-8 px-4">
+            <div className="max-w-3xl mx-auto">
+                {/* ---------- Header / Back ---------- */}
+                <header className="mb-6">
+                    <button
+                        onClick={() => router.back()}
+                        className="text-gray-600 hover:text-gray-900 flex items-center gap-2 hover:translate-x-[-8px] transition-all"
+                        aria-label="ย้อนกลับ"
+                    >
+                        <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 19l-7-7 7-7"
+                            />
+                        </svg>
+                        <span className="font-medium text-sm">
+                            กลับ
                         </span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-1">
-                        <span className="text-gray-700">จำนวนชั่วโมง</span>
-                        <span className="font-medium">{reservation?.duration ?? "-"}</span>
-                    </div>
-                </div>
+                    </button>
+                </header>
 
-                {/* โปรโมชัน (แสดงผลอย่างเดียว ใช้อัตโนมัติหากมี) */}
-                <div className="mb-6">
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-semibold text-gray-700">🎁 โปรโมชัน/ส่วนลด</label>
-                        {loadingPreview && <span className="text-xs text-gray-500">กำลังคำนวณส่วนลด…</span>}
+                {/* ---------- Card Wrapper ---------- */}
+                <section className="bg-white rounded-2xl shadow-sm p-6">
+                    {/* Title */}
+                    <div className="mb-2">
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            ชำระเงินด้วยกระเป๋าเงิน (Wallet)
+                        </h1>
+                        <p className="text-gray-500 text-sm mt-1">
+                            หมายเลขการจอง:{" "}
+                            <span className="font-medium">
+                                {reservationId}
+                            </span>
+                        </p>
                     </div>
 
-                    {promotions.length === 0 ? (
-                        <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3">
-                            ยังไม่มีโปรโมชันที่ใช้ได้
-                        </div>
-                    ) : (
-                        <div className="p-3 rounded-xl border border-blue-500 bg-blue-50">
-                            <div className="font-medium">{promotions[0].name}</div>
-                            {promotions[0].description && (
-                                <div className="text-xs text-gray-600 mt-0.5">{promotions[0].description}</div>
-                            )}
-                            <div className="mt-1 text-xs text-blue-700">ระบบจะใช้โปรโมชันนี้ให้อัตโนมัติ</div>
+                    {/* Error */}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-sm mb-4">
+                            {error}
                         </div>
                     )}
-                </div>
 
-                {/* Breakdown */}
-                <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
-                    <Row label="ยอดก่อนส่วนลด" value={preview?.subtotal ?? subtotalFallback} />
-                    <Row label="ส่วนลดโปรโมชัน" value={-(preview?.discount ?? 0)} />
-                    <div className="border-t border-gray-200 my-2" />
-                    <Row label="ยอดที่ต้องชำระ" value={preview?.total ?? subtotalFallback} bold />
-
-                    <div className="border-t border-gray-200 my-2" />
-                    <Row
-                        label="ยอดคงเหลือในกระเป๋า"
-                        value={walletBalance ?? NaN}
-                        hint={walletBalance === null ? "— กำลังโหลด/ยังไม่รองรับ endpoint" : undefined}
-                    />
-
-                    {typeof walletBalance === "number" && (
-                        <Row
-                            label="คงเหลือหลังชำระ"
-                            value={(walletBalance ?? 0) - (preview?.total ?? subtotalFallback)}
-                            muted={(walletBalance ?? 0) - (preview?.total ?? subtotalFallback) < 0}
+                    {/* ---------- Reservation summary ---------- */}
+                    <section className="bg-blue-50 rounded-xl p-4 mb-6">
+                        <RowInline
+                            label="โต๊ะ"
+                            value={
+                                reservation?.table
+                                    ? `#${reservation.table.number} (${reservation.table.type})`
+                                    : "-"
+                            }
                         />
+                        <RowInline
+                            label="จำนวนชั่วโมง"
+                            value={
+                                reservation?.duration?.toString() ??
+                                "-"
+                            }
+                        />
+                    </section>
+
+                    {/* ---------- Promotion info ---------- */}
+                    <section className="mb-6">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-semibold text-gray-700">
+                                🎁 โปรโมชัน/ส่วนลด
+                            </label>
+                            {loadingPreview && (
+                                <span className="text-xs text-gray-500">
+                                    กำลังคำนวณส่วนลด…
+                                </span>
+                            )}
+                        </div>
+
+                        {promotions.length === 0 ? (
+                            <div className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-3">
+                                ยังไม่มีโปรโมชันที่ใช้ได้
+                            </div>
+                        ) : (
+                            <div className="p-3 rounded-xl border border-blue-500 bg-blue-50">
+                                <div className="font-medium text-gray-900">
+                                    {promotions[0].name}
+                                </div>
+                                {promotions[0].description && (
+                                    <div className="text-xs text-gray-600 mt-0.5">
+                                        {promotions[0].description}
+                                    </div>
+                                )}
+                                <div className="mt-1 text-xs text-blue-700">
+                                    ระบบจะใช้โปรโมชันนี้ให้อัตโนมัติ
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* ---------- Cost breakdown ---------- */}
+                    <section className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
+                        <RowMoney
+                            label="ยอดก่อนส่วนลด"
+                            value={
+                                preview?.subtotal ??
+                                subtotalFallback
+                            }
+                        />
+                        <RowMoney
+                            label="ส่วนลดโปรโมชัน"
+                            value={-(preview?.discount ?? 0)}
+                        />
+
+                        <div className="border-t border-gray-200 my-2" />
+
+                        <RowMoney
+                            label="ยอดที่ต้องชำระ"
+                            value={
+                                preview?.total ??
+                                subtotalFallback
+                            }
+                            bold
+                        />
+
+                        <div className="border-t border-gray-200 my-2" />
+
+                        <RowMoney
+                            label="ยอดคงเหลือในกระเป๋า"
+                            value={walletBalance ?? NaN}
+                            hint={
+                                walletBalance === null
+                                    ? "— กำลังโหลด/ยังไม่รองรับ endpoint"
+                                    : undefined
+                            }
+                        />
+
+                        {typeof walletBalance ===
+                            "number" && (
+                            <RowMoney
+                                label="คงเหลือหลังชำระ"
+                                value={
+                                    (walletBalance ?? 0) -
+                                    (preview?.total ??
+                                        subtotalFallback)
+                                }
+                                muted={
+                                    (walletBalance ?? 0) -
+                                        (preview?.total ??
+                                            subtotalFallback) <
+                                    0
+                                }
+                            />
+                        )}
+                    </section>
+
+                    {/* ---------- Warning if not enough ---------- */}
+                    {!canPay && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-yellow-800 text-sm mb-4">
+                            ยอดเงินในกระเป๋าไม่เพียงพอ
+                            กรุณาเติมเงินก่อนทำรายการ
+                        </div>
                     )}
-                </div>
 
-                {!canPay && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-yellow-800 text-sm mb-4">
-                        ยอดเงินในกระเป๋าไม่เพียงพอ กรุณาเติมเงินก่อนทำรายการ
-                    </div>
-                )}
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={() => router.push(`/topup?return=/walletpay?reservationId=${reservationId}`)}
-                        className="px-4 py-3 rounded-xl bg-gray-100 text-gray-800 font-semibold hover:bg-gray-200"
-                        type="button"
-                    >
-                        เติมเงิน
-                    </button>
-
-                    <button
-                        onClick={handleConfirmPay}
-                        disabled={submitting || !reservationId || (preview?.total ?? subtotalFallback) <= 0 || !canPay}
-                        className={`flex-1 py-3 rounded-xl font-semibold transition-all ${!submitting && canPay ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    {/* ---------- Actions ---------- */}
+                    <section className="flex flex-col sm:flex-row gap-3">
+                        <button
+                            onClick={handleConfirmPay}
+                            disabled={
+                                submitting ||
+                                !reservationId ||
+                                (preview?.total ??
+                                    subtotalFallback) <=
+                                    0 ||
+                                !canPay
+                            }
+                            className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
+                                !submitting && canPay
+                                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
                             }`}
-                    >
-                        {submitting ? "กำลังชำระเงิน..." : "ยืนยันชำระด้วย Wallet"}
-                    </button>
-                </div>
+                        >
+                            {submitting
+                                ? "กำลังชำระเงิน..."
+                                : "ยืนยันชำระด้วย Wallet"}
+                        </button>
+                    </section>
+                </section>
             </div>
-        </div>
+        </main>
     );
 }
 
 // ---------- utilities ----------
+
 async function safeJSON(res: Response) {
     try {
         return await res.json();
@@ -341,7 +498,26 @@ async function safeJSON(res: Response) {
     }
 }
 
-function Row({
+// แถว 2 คอลัมน์ปกติ (เช่น โต๊ะ #5)
+function RowInline({
+    label,
+    value,
+}: {
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="flex justify-between text-sm">
+            <span className="text-gray-700">{label}</span>
+            <span className="font-medium text-gray-900">
+                {value}
+            </span>
+        </div>
+    );
+}
+
+// แถวตัวเลขเงิน พร้อม฿
+function RowMoney({
     label,
     value,
     bold,
@@ -354,12 +530,25 @@ function Row({
     muted?: boolean;
     hint?: string;
 }) {
-    const show = Number.isFinite(value) ? (value as number) : NaN;
+    const show = Number.isFinite(value)
+        ? (value as number)
+        : NaN;
+
     return (
-        <div className={`flex justify-between text-sm ${bold ? "font-semibold" : ""} ${muted ? "text-red-600" : ""}`}>
+        <div
+            className={`flex justify-between text-sm ${
+                bold ? "font-semibold" : ""
+            } ${muted ? "text-red-600" : ""}`}
+        >
             <span className="text-gray-700">{label}</span>
-            <span className={`${bold ? "text-gray-900" : "text-gray-800"}`}>
-                {Number.isFinite(show) ? `${show} ฿` : hint ?? "-"}
+            <span
+                className={`${
+                    bold ? "text-gray-900" : "text-gray-800"
+                }`}
+            >
+                {Number.isFinite(show)
+                    ? `${show} ฿`
+                    : hint ?? "-"}
             </span>
         </div>
     );
