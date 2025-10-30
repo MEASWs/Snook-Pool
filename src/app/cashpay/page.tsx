@@ -1,6 +1,7 @@
 "use client";
+export const dynamic = "force-dynamic"; // ป้องกัน Next พยายาม prerender
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 // -------- types --------
@@ -17,9 +18,9 @@ type PaymentStatus = "PENDING" | "PAID" | "CANCELLED" | string;
 
 type CashPayment = {
     id: string;
-    status: PaymentStatus; // PENDING / PAID / CANCELLED
+    status: PaymentStatus;
     amount: number;
-    method: string; // "CASH"
+    method: string;
     createdAt?: string;
     paidAt: string | null;
     reservation: {
@@ -60,10 +61,11 @@ function formatTHB(n: number) {
 
 function copyText(txt: string) {
     if (!txt) return;
-    navigator.clipboard?.writeText(txt).catch(() => { });
+    navigator.clipboard?.writeText(txt).catch(() => {});
 }
 
-export default function CashPayPage() {
+// -------- Main Content --------
+function CashPayContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -72,13 +74,9 @@ export default function CashPayPage() {
         (process.env.NEXT_PUBLIC_API_DOMAIN as string) ||
         "http://localhost:3001";
 
-    // ---------- local state ----------
     const [reservation, setReservation] = useState<Reservation | null>(null);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-
-    // เก็บข้อมูลบิลเงินสด (PENDING / PAID)
     const [payment, setPayment] = useState<CashPayment | null>(null);
     const [billError, setBillError] = useState("");
 
@@ -98,7 +96,6 @@ export default function CashPayPage() {
 
             try {
                 const token = localStorage.getItem("token") || "";
-
                 const res = await fetch(
                     `${API}/api/v1/reservation/authorized/reservations/${reservationId}`,
                     {
@@ -112,7 +109,7 @@ export default function CashPayPage() {
                     if (!cancel) {
                         setError(
                             data?.message ||
-                            `โหลดข้อมูลการจองไม่สำเร็จ (HTTP ${res.status})`
+                                `โหลดข้อมูลการจองไม่สำเร็จ (HTTP ${res.status})`
                         );
                     }
                 } else {
@@ -138,28 +135,25 @@ export default function CashPayPage() {
     // คำนวณยอดรวม
     const total = useMemo(() => {
         if (!reservation) return 0;
-        if (typeof reservation.amount === "number") {
-            return reservation.amount;
-        }
+        if (typeof reservation.amount === "number") return reservation.amount;
         const rate = reservation.table?.hourlyRate ?? 0;
         const hrs = reservation.duration ?? 1;
         return rate * hrs;
     }, [reservation]);
 
-    // ยิง POST เพื่อ "สร้างบิลเงินสด" ครั้งแรกที่เข้าหน้า (หรือดึงอันที่มีอยู่แล้ว)
+    // ยิง POST เพื่อสร้างบิลเงินสด
     useEffect(() => {
         let cancel = false;
 
         async function createCashBill() {
             if (!reservationId) return;
-            if (!reservation) return; // ต้องรอโหลด reservation เสร็จก่อน
-            if (payment) return; // ถ้าเรามี payment state แล้วไม่ต้องยิงซ้ำ
+            if (!reservation) return;
+            if (payment) return;
 
             setBillError("");
 
             try {
                 const token = localStorage.getItem("token") || "";
-
                 const res = await fetch(`${API}/api/v1/payment/authorized/payments`, {
                     method: "POST",
                     headers: {
@@ -180,9 +174,6 @@ export default function CashPayPage() {
                     data = null;
                 }
 
-                // สถานการณ์:
-                // - 201: สร้างบิลใหม่ สถานะ PENDING
-                // - 409: มีบิลสถานะ PENDING อยู่แล้ว (ไม่ต้องสร้างซ้ำ)
                 if (!res.ok) {
                     if (res.status === 409) {
                         if (!cancel) {
@@ -194,17 +185,16 @@ export default function CashPayPage() {
                         if (!cancel) {
                             setBillError(
                                 data?.message ||
-                                `สร้างบิลเงินสดไม่สำเร็จ (HTTP ${res.status})`
+                                    `สร้างบิลเงินสดไม่สำเร็จ (HTTP ${res.status})`
                             );
                         }
                     }
                     return;
                 }
 
-                // สร้างบิลใหม่เรียบร้อย
                 const p = data?.data;
                 if (!cancel && p) {
-                    const nowIso = new Date().toISOString(); // timestamp ฝั่ง client ไว้โชว์ "ออกบิลเมื่อ"
+                    const nowIso = new Date().toISOString();
                     setPayment({
                         id: p.id,
                         status: p.status,
@@ -218,15 +208,15 @@ export default function CashPayPage() {
                             endTime: p.reservation?.endTime ?? null,
                             table: p.reservation?.table
                                 ? {
-                                    number: p.reservation.table.number,
-                                    type: p.reservation.table.type,
-                                }
+                                      number: p.reservation.table.number,
+                                      type: p.reservation.table.type,
+                                  }
                                 : reservation?.table
-                                    ? {
-                                        number: reservation.table.number,
-                                        type: reservation.table.type,
-                                    }
-                                    : null,
+                                ? {
+                                      number: reservation.table.number,
+                                      type: reservation.table.type,
+                                  }
+                                : null,
                         },
                     });
                 }
@@ -238,13 +228,11 @@ export default function CashPayPage() {
         }
 
         createCashBill();
-
         return () => {
             cancel = true;
         };
     }, [API, reservationId, reservation, payment]);
 
-    // ---------- loading state ----------
     if (loading) {
         return (
             <main className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -253,7 +241,6 @@ export default function CashPayPage() {
         );
     }
 
-    // ---------- UI ----------
     return (
         <main className="min-h-screen bg-gray-50 py-8 px-4">
             <div className="max-w-xl mx-auto bg-white rounded-2xl shadow-sm p-6">
@@ -292,10 +279,8 @@ export default function CashPayPage() {
                     <h1 className="text-xl font-bold text-gray-900 mb-2">
                         ชำระเงินสดที่หน้าร้าน
                     </h1>
-
                     <p className="text-gray-500 text-sm leading-relaxed">
-                        ระบบได้สร้างบิลการชำระเงินสดให้แล้ว
-                        {" "}
+                        ระบบได้สร้างบิลการชำระเงินสดให้แล้ว{" "}
                         <span className="font-semibold text-yellow-600">
                             (รอชำระ)
                         </span>
@@ -330,30 +315,25 @@ export default function CashPayPage() {
                             reservation?.table
                                 ? `โต๊ะที่ ${reservation.table.number} (${reservation.table.type})`
                                 : payment?.reservation.table
-                                    ? `โต๊ะที่ ${payment.reservation.table.number} (${payment.reservation.table.type})`
-                                    : "-"
+                                ? `โต๊ะที่ ${payment.reservation.table.number} (${payment.reservation.table.type})`
+                                : "-"
                         }
                     />
                     <Row
                         label="เวลาจองเริ่ม"
                         value={formatThaiDateTime(
                             reservation?.startTime ??
-                            payment?.reservation.startTime
+                                payment?.reservation.startTime
                         )}
                     />
                     <Row
                         label="เวลาจองจบ"
                         value={formatThaiDateTime(
-                            reservation?.endTime ??
-                            payment?.reservation.endTime
+                            reservation?.endTime ?? payment?.reservation.endTime
                         )}
                     />
                     <Row label="วิธีชำระ" value="เงินสด" />
-                    <Row
-                        label="ยอดที่ต้องชำระ"
-                        value={formatTHB(total)}
-                        highlight
-                    />
+                    <Row label="ยอดที่ต้องชำระ" value={formatTHB(total)} highlight />
 
                     <div className="border-t border-blue-200 mt-3 pt-3 space-y-1 text-xs text-gray-600">
                         <RowInline
@@ -362,15 +342,15 @@ export default function CashPayPage() {
                                 payment?.status === "PAID"
                                     ? "ชำระแล้ว"
                                     : payment?.status === "CANCELLED"
-                                        ? "ยกเลิก"
-                                        : "รอชำระ"
+                                    ? "ยกเลิก"
+                                    : "รอชำระ"
                             }
                             valueClass={
                                 payment?.status === "PAID"
                                     ? "text-green-600 font-semibold"
                                     : payment?.status === "CANCELLED"
-                                        ? "text-gray-500 font-semibold"
-                                        : "text-yellow-700 font-semibold"
+                                    ? "text-gray-500 font-semibold"
+                                    : "text-yellow-700 font-semibold"
                             }
                         />
                         <RowInline
@@ -399,9 +379,7 @@ export default function CashPayPage() {
                         <span className="text-green-600 font-semibold">
                             ชำระแล้ว
                         </span>{" "}
-                        และคุณจะสามารถดูหลักฐานได้ในหน้า
-                        {" "}
-                        “รายการจองของฉัน”
+                        และคุณจะสามารถดูหลักฐานได้ในหน้า “รายการจองของฉัน”
                     </p>
                 </section>
             </div>
@@ -409,7 +387,7 @@ export default function CashPayPage() {
     );
 }
 
-// -------- small presentational helpers --------
+// -------- helpers UI components --------
 function Row({
     label,
     value,
@@ -423,8 +401,9 @@ function Row({
         <div className="flex justify-between mt-1 first:mt-0">
             <span className="text-gray-700">{label}</span>
             <span
-                className={`text-right font-medium ${highlight ? "text-blue-600 font-semibold" : "text-gray-900"
-                    }`}
+                className={`text-right font-medium ${
+                    highlight ? "text-blue-600 font-semibold" : "text-gray-900"
+                }`}
             >
                 {value}
             </span>
@@ -448,5 +427,14 @@ function RowInline({
                 {value}
             </span>
         </div>
+    );
+}
+
+// -------- Export Page (with Suspense) --------
+export default function CashPayPage() {
+    return (
+        <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
+            <CashPayContent />
+        </Suspense>
     );
 }

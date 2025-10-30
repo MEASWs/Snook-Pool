@@ -99,7 +99,7 @@ export default function AdminPaymentsPage() {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
-    const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+    const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
 
     const handleNavigation = (path: string) => {
         window.location.href = path;

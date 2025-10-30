@@ -1,0 +1,20 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js build output
+.next
+.next/cache
+
+# Local env files (you can keep .env for build-time values)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# VCS / misc
+.git
+.gitignore
+Dockerfile
+.dockerignore
+.DS_Store

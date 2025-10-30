@@ -1,16 +1,17 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 type NextStatus = "CONFIRMED" | "COMPLETED";
 
-export default function AdminQuickChangeStatusPage() {
+function AdminQuickChangeStatusContent() {
     const search = useSearchParams();
     const router = useRouter();
 
     // env
-    const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+    const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
 
     // form states
     const [reservationId, setReservationId] = useState("");
@@ -61,7 +62,7 @@ export default function AdminQuickChangeStatusPage() {
                 }
             );
 
-            // พยายาม parse json -> ถ้า parse ไม่ได้จะลอง text
+            // parse response: json ถ้าไม่ได้ก็ text
             let parsed: any = null;
             try {
                 parsed = await res.json();
@@ -74,7 +75,6 @@ export default function AdminQuickChangeStatusPage() {
                 }
             }
 
-            // ถ้า success
             if (res.ok) {
                 setServerMsg("✅ อัปเดตสถานะการจองเรียบร้อยแล้ว");
                 const data = parsed?.data;
@@ -94,7 +94,7 @@ export default function AdminQuickChangeStatusPage() {
                 setServerMsg(`❌ ${msg}`);
                 setServerJson(null);
             }
-        } catch (err: any) {
+        } catch {
             setServerMsg("❌ Network Error");
             setServerJson(null);
         } finally {
@@ -110,7 +110,6 @@ export default function AdminQuickChangeStatusPage() {
     return (
         <div className="min-h-screen bg-gray-50">
             <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-
                 {/* ปุ่มกลับไปหน้า Admin */}
                 <div className="mb-2">
                     <button
@@ -149,8 +148,8 @@ export default function AdminQuickChangeStatusPage() {
                     <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
                         ใช้หน้านี้เวลาเรารู้ Reservation ID อยู่แล้ว
                         <br />
-                        เช่น ลูกค้ามาหน้าร้านแล้วเล่นจบ
-                        → เปลี่ยนเป็น COMPLETED เพื่อเคลียร์โต๊ะ
+                        เช่น ลูกค้ามาหน้าร้านแล้วเล่นจบ → เปลี่ยนเป็น COMPLETED
+                        เพื่อเคลียร์โต๊ะ
                     </p>
                 </header>
 
@@ -165,14 +164,17 @@ export default function AdminQuickChangeStatusPage() {
                         {/* Reservation ID */}
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-gray-700">
-                                Reservation ID <span className="text-red-500">*</span>
+                                Reservation ID{" "}
+                                <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="text"
                                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono text-sm"
                                 placeholder="97dc6cda-1b2e-43fa-9763-439000cd2fef"
                                 value={reservationId}
-                                onChange={(e) => setReservationId(e.target.value.trim())}
+                                onChange={(e) =>
+                                    setReservationId(e.target.value.trim())
+                                }
                             />
                             <p className="text-xs text-gray-500">
                                 ใส่ ID ของการจองที่ต้องการอัปเดตสถานะ
@@ -188,7 +190,9 @@ export default function AdminQuickChangeStatusPage() {
                                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                 value={nextStatus}
                                 onChange={(e) =>
-                                    setNextStatus(e.target.value as NextStatus)
+                                    setNextStatus(
+                                        e.target.value as NextStatus
+                                    )
                                 }
                             >
                                 <option value="CONFIRMED">
@@ -200,8 +204,10 @@ export default function AdminQuickChangeStatusPage() {
                             </select>
                             <p className="text-xs text-gray-500 leading-relaxed">
                                 ปกติ: <br />
-                                - สถานะ PENDING → กดเป็น CONFIRMED เมื่อลูกค้ามาโต๊ะจริง <br />
-                                - สถานะ CONFIRMED → กดเป็น COMPLETED หลังเล่นจบและจ่ายบิลแล้ว
+                                - สถานะ PENDING → กดเป็น CONFIRMED เมื่อลูกค้ามาโต๊ะจริง
+                                <br />
+                                - สถานะ CONFIRMED → กดเป็น COMPLETED
+                                หลังเล่นจบและจ่ายบิลแล้ว
                             </p>
                         </div>
 
@@ -215,7 +221,9 @@ export default function AdminQuickChangeStatusPage() {
                                     : "bg-blue-600 hover:bg-blue-700 hover:shadow-md active:scale-[0.99]"
                             }`}
                         >
-                            {loading ? "กำลังอัปเดต..." : "✅ อัปเดตสถานะ"}
+                            {loading
+                                ? "กำลังอัปเดต..."
+                                : "✅ อัปเดตสถานะ"}
                         </button>
 
                         {/* ผลลัพธ์หลังบ้าน */}
@@ -284,5 +292,14 @@ export default function AdminQuickChangeStatusPage() {
                 </section>
             </main>
         </div>
+    );
+}
+
+// Page export with Suspense boundary
+export default function AdminQuickChangeStatusPage() {
+    return (
+        <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
+            <AdminQuickChangeStatusContent />
+        </Suspense>
     );
 }

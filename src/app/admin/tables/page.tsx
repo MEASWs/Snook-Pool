@@ -14,7 +14,7 @@ type AdminTableRow = {
     status: TableStatus;
 };
 
-const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
 
 const ADMIN_PREFIX = `${API}/api/v1/adminTable/authorized`;
 const ADMIN_POST = `${ADMIN_PREFIX}/`; // POST (มี / ปิดท้าย)

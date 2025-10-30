@@ -1,6 +1,7 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 type Table = {
@@ -13,7 +14,10 @@ type Table = {
 
 type BusySlot = { start: string; end: string };
 
-export default function ReservePage() {
+// ---------------------
+// ชั้นใน: ใช้ hooks ได้
+// ---------------------
+function ReserveContent() {
   const searchParams = useSearchParams();
   const tableId = searchParams.get("tableId"); // string | null
   const router = useRouter();
@@ -74,6 +78,7 @@ export default function ReservePage() {
         console.error(err);
         setError("ไม่สามารถโหลดข้อมูลโต๊ะได้");
       } finally {
+        // ดีเลย์นิดหน่อยเพื่อไม่ให้กระพริบ
         setTimeout(() => setLoading(false), 400);
       }
     }
@@ -81,13 +86,10 @@ export default function ReservePage() {
     fetchTable();
   }, [API, tableId]);
 
-
   // โหลดช่วงเวลาที่ถูกจอง
   useEffect(() => {
-    // ถ้าไม่มี tableId หรือไม่มี date ก็ไม่ต้องยิง API
     if (!tableId || !date) return;
 
-    // ✅ ตรงนี้! ทำตัวแปร local ที่เป็น string ล้วน
     const safeTableId: string = tableId;
 
     async function fetchBusySlots() {
@@ -108,7 +110,6 @@ export default function ReservePage() {
     fetchBusySlots();
   }, [API, tableId, date]);
 
-
   // ราคาทั้งหมด
   const calculateTotal = () =>
     table ? table.hourlyRate * duration : 0;
@@ -127,7 +128,7 @@ export default function ReservePage() {
     });
   };
 
-  // เลยเที่ยงคืนมั้ย
+  // เลยเที่ยงคืนมั้ย (ถ้าเกิน 23:xx ไม่ให้เลือก)
   const overDay = useMemo(
     () => startHour !== null && startHour + duration > 23,
     [startHour, duration]
@@ -163,12 +164,13 @@ export default function ReservePage() {
             setStartHour(hour);
             setError("");
           }}
-          className={`py-3 px-2 rounded-xl font-semibold text-sm transition-all ${isSelected
+          className={`py-3 px-2 rounded-xl font-semibold text-sm transition-all ${
+            isSelected
               ? "bg-blue-600 text-white shadow-md"
               : disabled
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-white border-2 border-gray-200 text-gray-700 active:bg-gray-50"
-            }`}
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "bg-white border-2 border-gray-200 text-gray-700 active:bg-gray-50"
+          }`}
           aria-pressed={isSelected}
           aria-disabled={disabled || undefined}
           aria-label={`เริ่ม ${String(hour).padStart(
@@ -197,7 +199,9 @@ export default function ReservePage() {
     }
 
     if (hasConflict || overDay) {
-      setError("เวลาที่เลือกทับกับช่วงเวลาที่ถูกจองแล้ว หรือเกินเวลาทำการ");
+      setError(
+        "เวลาที่เลือกทับกับช่วงเวลาที่ถูกจองแล้ว หรือเกินเวลาทำการ"
+      );
       return;
     }
 
@@ -207,7 +211,6 @@ export default function ReservePage() {
       return;
     }
 
-    // ✅ fix type อีกจุด
     const safeTableId: string = tableId;
 
     setSubmitting(true);
@@ -217,7 +220,8 @@ export default function ReservePage() {
       `${date}T${String(startHour).padStart(2, "0")}:00:00`
     );
     const startISO = new Date(
-      startDate.getTime() - startDate.getTimezoneOffset() * 60000
+      startDate.getTime() -
+        startDate.getTimezoneOffset() * 60000
     ).toISOString();
 
     try {
@@ -249,7 +253,8 @@ export default function ReservePage() {
         alert("จองโต๊ะสำเร็จ! 🎉");
 
         router.push(
-          `/reservationlist${reservationId ? `?focus=${reservationId}` : ""
+          `/reservationlist${
+            reservationId ? `?focus=${reservationId}` : ""
           }`
         );
       } else {
@@ -262,7 +267,6 @@ export default function ReservePage() {
       setSubmitting(false);
     }
   };
-
 
   // ---------- LOADING STATE ----------
   if (loading) {
@@ -481,11 +485,11 @@ export default function ReservePage() {
                   <span className="font-medium text-gray-900">
                     {startHour !== null
                       ? `${String(startHour).padStart(
-                        2,
-                        "0"
-                      )}:00 - ${String(
-                        startHour + duration
-                      ).padStart(2, "0")}:00`
+                          2,
+                          "0"
+                        )}:00 - ${String(
+                          startHour + duration
+                        ).padStart(2, "0")}:00`
                       : "ยังไม่ได้เลือก"}
                   </span>
                 </div>
@@ -541,13 +545,14 @@ export default function ReservePage() {
                   hasConflict ||
                   overDay
                 }
-                className={`w-full py-3.5 rounded-xl font-semibold transition-all ${!submitting &&
-                    startHour !== null &&
-                    !hasConflict &&
-                    !overDay
+                className={`w-full py-3.5 rounded-xl font-semibold transition-all ${
+                  !submitting &&
+                  startHour !== null &&
+                  !hasConflict &&
+                  !overDay
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  }`}
+                }`}
                 aria-disabled={
                   submitting ||
                   startHour === null ||
@@ -559,13 +564,24 @@ export default function ReservePage() {
                 {submitting
                   ? "กำลังดำเนินการ..."
                   : startHour !== null
-                    ? "✅ ยืนยันการจอง"
-                    : "⚠️ กรุณาเลือกเวลาก่อน"}
+                  ? "✅ ยืนยันการจอง"
+                  : "⚠️ กรุณาเลือกเวลาก่อน"}
               </button>
             </section>
           </section>
         </article>
       </main>
     </div>
+  );
+}
+
+// ---------------------
+// ชั้นนอก: ใส่ Suspense ครอบ
+// ---------------------
+export default function ReservePage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
+      <ReserveContent />
+    </Suspense>
   );
 }

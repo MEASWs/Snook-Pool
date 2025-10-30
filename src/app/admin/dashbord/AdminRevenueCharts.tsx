@@ -24,7 +24,7 @@ type ReservationRecord = {
     };
 };
 
-const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
 
 // ---------- Custom tooltip for THB ----------
 function BahtTooltip({ active, payload, label }: any) {

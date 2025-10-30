@@ -32,7 +32,7 @@ type ReservationRow = {
     } | null;
 };
 
-const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
 
 // ---- time helper (no timezone shift) ----
 function formatThaiDateTimeNoShift(iso?: string | null) {

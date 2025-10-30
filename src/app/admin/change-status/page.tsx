@@ -42,7 +42,7 @@ export default function AdminChangeReservationStatusPage() {
     const router = useRouter();
 
     // ---------- CONFIG ----------
-    const API = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3001";
+    const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
     const PATCH_URL = `${API}/api/v1/admin/authorized/reservations`;
     const LIST_URL = `${API}/api/v1/admin/authorized/reservations`;
 

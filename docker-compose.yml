@@ -1,0 +1,8 @@
+services:
+  snook-frontend:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      NEXT_PUBLIC_API_DOMAIN: "${NEXT_PUBLIC_API_DOMAIN}"
+      NODE_ENV: "${NODE_ENV}"
