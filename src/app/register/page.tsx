@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-// ✅ ดึง base URL จาก .env
-// ตัวแปรใน .env ต้องมี เช่น NEXT_PUBLIC_API_DOMAIN="http://localhost:3001"
+// ✅ ใช้ตัวแปร .env
 const API = process.env.NEXT_PUBLIC_API_DOMAIN as string;
 
 export default function RegisterPage() {
     const router = useRouter();
 
+    // ----- UI state -----
     const [isLoading, setIsLoading] = useState(false);
+    const [message, setMessage] = useState("");
 
+    // ----- Form state -----
     const [form, setForm] = useState({
         name: "",
         phone: "",
@@ -20,27 +22,54 @@ export default function RegisterPage() {
         confirmPassword: "",
     });
 
-    const [message, setMessage] = useState("");
-
+    // onChange handler
     function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
         setForm({ ...form, [e.target.name]: e.target.value });
     }
 
+    // 🔒 Custom JS validation (Basic + JS ตรวจสอบ)
+    function validateClientSide(): string | null {
+        // 1) password === confirmPassword
+        if (form.password !== form.confirmPassword) {
+            return "รหัสผ่านไม่ตรงกัน";
+        }
+
+        // 2) extra check: password strength (กัน user ปิด pattern ผ่าน devtools)
+        // อย่างน้อย 8 ตัว, ต้องมีตัวอักษร >=1 และตัวเลข >=1
+        const passwordStrongRegex =
+            /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-={}\[\]|\\:;"'<>,.?/]{8,}$/;
+        if (!passwordStrongRegex.test(form.password)) {
+            return "รหัสผ่านต้องอย่างน้อย 8 ตัวอักษร และมีทั้งตัวอักษรและตัวเลข";
+        }
+
+        // 3) phone must be 9-10 digits (เฉพาะตัวเลข)
+        const phoneRegex = /^[0-9]{9,10}$/;
+        if (!phoneRegex.test(form.phone)) {
+            return "รูปแบบเบอร์โทรไม่ถูกต้อง (ต้องเป็นตัวเลข 9-10 หลัก)";
+        }
+
+        // 4) name อย่างน้อย 2 ตัวอักษร
+        const nameRegex = /^.{2,}$/;
+        if (!nameRegex.test(form.name.trim())) {
+            return "กรุณาใส่ชื่ออย่างน้อย 2 ตัวอักษร";
+        }
+
+        return null; // ผ่านทั้งหมด
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-
-        // reset error
         setMessage("");
 
-        // เช็ครหัสซ้ำก่อนยิง API
-        if (form.password !== form.confirmPassword) {
-            setMessage("รหัสผ่านไม่ตรงกัน");
+        // 🧠 วิ่ง custom JS validation ก่อนยิง API
+        const clientErr = validateClientSide();
+        if (clientErr) {
+            setMessage(clientErr);
             return;
         }
 
         setIsLoading(true);
         try {
-            // ✅ ใช้ API จาก .env
             const res = await fetch(`${API}/api/v1/auth/guest/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -56,7 +85,7 @@ export default function RegisterPage() {
             const data = await res.json().catch(() => ({}));
 
             if (res.ok) {
-                // สมัครสำเร็จ กลับหน้าแรกหรือจะพาไป login ก็ได้
+                // สมัครเสร็จ -> ไปหน้า login
                 router.push("/login");
             } else {
                 setMessage(data?.message || "สมัครไม่สำเร็จ");
@@ -102,9 +131,7 @@ export default function RegisterPage() {
                     >
                         Create Account
                     </h1>
-                    <p className="text-gray-600">
-                        Sign up to get started
-                    </p>
+                    <p className="text-gray-600">Sign up to get started</p>
                 </header>
 
                 {/* ---------- Form ---------- */}
@@ -113,7 +140,7 @@ export default function RegisterPage() {
                     onSubmit={handleSubmit}
                     aria-describedby={message ? "form-error" : undefined}
                 >
-                    {/* Name */}
+                    {/* Full Name */}
                     <div className="flex flex-col">
                         <label
                             htmlFor="name"
@@ -129,14 +156,18 @@ export default function RegisterPage() {
                                 placeholder="John Doe"
                                 value={form.name}
                                 onChange={handleChange}
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                                 required
                                 disabled={isLoading}
+                                // อย่างน้อย 2 ตัวอักษร
+                                pattern=".{2,}"
+                                title="กรุณาใส่อย่างน้อย 2 ตัวอักษร"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg 
+                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                             />
                         </div>
-                    </div>
+                    </div>ๅ
 
-                    {/* Phone */}
+                    {/* Phone Number */}
                     <div className="flex flex-col">
                         <label
                             htmlFor="phone"
@@ -152,9 +183,14 @@ export default function RegisterPage() {
                                 placeholder="0812345678"
                                 value={form.phone}
                                 onChange={handleChange}
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                                 required
                                 disabled={isLoading}
+                                // เบอร์ = ตัวเลข 9-10 หลัก
+                                pattern="^[0-9]{9,10}$"
+                                title="กรุณาใส่เบอร์โทร 9-10 หลัก (ตัวเลขเท่านั้น)"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg 
+                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent 
+                                text-gray-900 placeholder-gray-500"
                             />
                         </div>
                     </div>
@@ -181,9 +217,10 @@ export default function RegisterPage() {
                                 placeholder="yourname@example.com"
                                 value={form.email}
                                 onChange={handleChange}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                                 required
                                 disabled={isLoading}
+                                // HTML5 จะเช็ค format email ให้เอง
+                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                             />
                         </div>
                     </div>
@@ -220,9 +257,15 @@ export default function RegisterPage() {
                                 placeholder="••••••••"
                                 value={form.password}
                                 onChange={handleChange}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                                 required
                                 disabled={isLoading}
+                                // ต้องมีตัวอักษร >=1, ตัวเลข >=1, และยาวอย่างน้อย 8 ตัว
+                                pattern="^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,}$"
+                                title="อย่างน้อย 8 ตัวอักษร และต้องมีตัวอักษรและตัวเลขอย่างละ 1"
+                                minLength={8}
+                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg 
+                                focus:outline-none focus:ring-2 focus:ring-blue-500 
+                                focus:border-transparent text-gray-900 placeholder-gray-500"
                             />
                         </div>
                     </div>
@@ -259,11 +302,14 @@ export default function RegisterPage() {
                                 placeholder="••••••••"
                                 value={form.confirmPassword}
                                 onChange={handleChange}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                                 required
                                 disabled={isLoading}
+                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
                             />
                         </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            ต้องตรงกับรหัสผ่านด้านบน
+                        </p>
                     </div>
 
                     {/* Submit button */}
@@ -309,7 +355,9 @@ export default function RegisterPage() {
                         className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg"
                         role="alert"
                     >
-                        <p className="text-sm text-red-600 text-center">{message}</p>
+                        <p className="text-sm text-red-600 text-center">
+                            {message}
+                        </p>
                     </div>
                 )}
 

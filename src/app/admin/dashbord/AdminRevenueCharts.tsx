@@ -9,7 +9,7 @@ import {
     Tooltip,
     ResponsiveContainer,
     Legend,
-    Cell, // 👈 เพิ่มอันนี้เข้ามา
+    Cell,
 } from "recharts";
 
 import { useEffect, useMemo, useState } from "react";
@@ -127,9 +127,48 @@ export default function AdminRevenueCharts() {
 
         return Object.entries(bucket).map(([tableNo, total]) => ({
             tableLabel: `โต๊ะ ${tableNo}`,
+            tableNo: Number(tableNo),
             total,
         }));
     }, [reservations]);
+
+    // 🔥 NEW: summary เชิงสถิติสำหรับตารางด้านล่าง
+    const summaryStats = useMemo(() => {
+        let totalAll = 0;
+        let totalSnooker = 0;
+        let totalPool = 0;
+
+        // รวมยอดทั้งหมด + แยกตามประเภทโต๊ะ
+        for (const r of reservations) {
+            const amount = r.lastPayment?.amount ?? 0;
+            totalAll += amount;
+
+            if (r.table?.type === "SNOOKER") {
+                totalSnooker += amount;
+            } else if (r.table?.type === "POOL") {
+                totalPool += amount;
+            }
+        }
+
+        // หาโต๊ะทำเงินสูงสุด
+        let topTableNo: number | null = null;
+        let topTableAmount = 0;
+        for (const row of revenueByTableNumberData) {
+            if (row.total > topTableAmount) {
+                topTableAmount = row.total;
+                topTableNo = row.tableNo;
+            }
+        }
+
+        return {
+            totalAll,
+            totalSnooker,
+            totalPool,
+            totalReservations: reservations.length,
+            topTableNo,
+            topTableAmount,
+        };
+    }, [reservations, revenueByTableNumberData]);
 
     // ---------- UI states ----------
     if (loading) {
@@ -165,112 +204,200 @@ export default function AdminRevenueCharts() {
         );
     }
 
-    // ---------- Render charts ----------
+    // ---------- Render charts + summary table ----------
     return (
-        <div className="grid gap-6 md:grid-cols-2">
-            {/* ----- Chart A: รายได้แยกตามประเภทโต๊ะ ----- */}
-            {revenueByTypeData.length === 0 ? (
-                renderEmptyCard("รายได้แยกตามประเภทโต๊ะ (บาท)")
-            ) : (
-                <div className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-200 h-[320px] flex flex-col">
-                    <h2 className="text-lg font-bold mb-2 text-gray-900">
-                        รายได้แยกตามประเภทโต๊ะ (บาท)
-                    </h2>
+        <div className="flex flex-col gap-6">
+            {/* ----- CHART GRID ----- */}
+            <div className="grid gap-6 md:grid-cols-2">
+                {/* ----- Chart A: รายได้แยกตามประเภทโต๊ะ ----- */}
+                {revenueByTypeData.length === 0 ? (
+                    renderEmptyCard("รายได้แยกตามประเภทโต๊ะ (บาท)")
+                ) : (
+                    <div className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-200 h-[320px] flex flex-col">
+                        <h2 className="text-lg font-bold mb-2 text-gray-900">
+                            รายได้แยกตามประเภทโต๊ะ (บาท)
+                        </h2>
 
-                    <div className="flex-1 min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                                data={revenueByTypeData}
-                                margin={{ top: 16, right: 24, bottom: 16, left: 8 }}
-                            >
-                                <CartesianGrid strokeDasharray="4 4" />
-                                <XAxis dataKey="tableType" />
-                                <YAxis
-                                    label={{
-                                        value: "บาท",
-                                        angle: -90,
-                                        position: "insideLeft",
+                        <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={revenueByTypeData}
+                                    margin={{
+                                        top: 16,
+                                        right: 24,
+                                        bottom: 16,
+                                        left: 8,
                                     }}
-                                />
-                                <Tooltip content={<BahtTooltip />} />
-                                <Legend />
-                                <Bar
-                                    dataKey="total"
-                                    name="รายได้รวม (บาท)"
-                                    barSize={35}
-                                    fillOpacity={0.9}
                                 >
-                                    {revenueByTypeData.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={
-                                                entry.tableType === "SNOOKER"
-                                                    ? "#ff0808" // ฟ้า
-                                                    : entry.tableType === "POOL"
-                                                        ? "#4c97fc" // #4c97fc
-                                                        : "#a1a1aa" // เทา
-                                            }
-                                        />
-                                    ))}
-                                </Bar>
-
-                            </BarChart>
-                        </ResponsiveContainer>
-
+                                    <CartesianGrid strokeDasharray="4 4" />
+                                    <XAxis dataKey="tableType" />
+                                    <YAxis
+                                        label={{
+                                            value: "บาท",
+                                            angle: -90,
+                                            position: "insideLeft",
+                                        }}
+                                    />
+                                    <Tooltip content={<BahtTooltip />} />
+                                    <Legend />
+                                    <Bar
+                                        dataKey="total"
+                                        name="รายได้รวม (บาท)"
+                                        barSize={35}
+                                        fillOpacity={0.9}
+                                    >
+                                        {revenueByTypeData.map(
+                                            (entry, index) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={
+                                                        entry.tableType ===
+                                                            "SNOOKER"
+                                                            ? "#ff0808"
+                                                            : entry.tableType ===
+                                                                "POOL"
+                                                                ? "#4c97fc"
+                                                                : "#a1a1aa"
+                                                    }
+                                                />
+                                            )
+                                        )}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* ----- Chart B: รายได้ต่อหมายเลขโต๊ะ ----- */}
-            {revenueByTableNumberData.length === 0 ? (
-                renderEmptyCard("ยอดขายต่อโต๊ะ (บาท)")
-            ) : (
-                <div className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-200 h-[320px] flex flex-col">
-                    <h2 className="text-lg font-bold mb-2 text-gray-900">
-                        ยอดขายต่อโต๊ะ (บาท)
-                    </h2>
+                {/* ----- Chart B: รายได้ต่อหมายเลขโต๊ะ ----- */}
+                {revenueByTableNumberData.length === 0 ? (
+                    renderEmptyCard("ยอดขายต่อโต๊ะ (บาท)")
+                ) : (
+                    <div className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-200 h-[320px] flex flex-col">
+                        <h2 className="text-lg font-bold mb-2 text-gray-900">
+                            ยอดขายต่อโต๊ะ (บาท)
+                        </h2>
 
-                    <div className="flex-1 min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart
-                                data={revenueByTableNumberData}
-                                layout="vertical"
-                                margin={{
-                                    top: 16,
-                                    right: 24,
-                                    bottom: 16,
-                                    left: 32,
-                                }}
-                            >
-                                <CartesianGrid strokeDasharray="4 4" />
-                                {/* X = ยอดเงิน */}
-                                <XAxis
-                                    type="number"
-                                    label={{
-                                        value: "บาท",
-                                        position: "insideBottomRight",
-                                        offset: -10,
+                        <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={revenueByTableNumberData}
+                                    layout="vertical"
+                                    margin={{
+                                        top: 16,
+                                        right: 24,
+                                        bottom: 16,
+                                        left: 32,
                                     }}
-                                />
-                                {/* Y = โต๊ะ 1 / โต๊ะ 5 / ... */}
-                                <YAxis
-                                    type="category"
-                                    dataKey="tableLabel"
-                                    width={64}
-                                />
-                                <Tooltip content={<BahtTooltip />} />
-                                <Legend />
-                                <Bar
-                                    dataKey="total"
-                                    name="รายได้รวม (บาท)"
-                                    barSize={25}
-                                    fill="#34d399"
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
+                                >
+                                    <CartesianGrid strokeDasharray="4 4" />
+                                    {/* X = ยอดเงิน */}
+                                    <XAxis
+                                        type="number"
+                                        label={{
+                                            value: "บาท",
+                                            position: "insideBottomRight",
+                                            offset: -10,
+                                        }}
+                                    />
+                                    {/* Y = โต๊ะ 1 / โต๊ะ 5 / ... */}
+                                    <YAxis
+                                        type="category"
+                                        dataKey="tableLabel"
+                                        width={64}
+                                    />
+                                    <Tooltip content={<BahtTooltip />} />
+                                    <Legend />
+                                    <Bar
+                                        dataKey="total"
+                                        name="รายได้รวม (บาท)"
+                                        barSize={25}
+                                        fill="#34d399"
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
+                )}
+            </div>
+
+            {/* ----- 🔥 SUMMARY TABLE (ตารางสรุปภาพรวม) ----- */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+                <h2 className="text-lg font-bold mb-4 text-gray-900">
+                    สรุปรายงานรายได้
+                </h2>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm text-left border-collapse">
+                        <tbody className="text-gray-700">
+                            <tr className="border-t border-gray-200">
+                                <th className="py-2 px-3 font-medium text-gray-600 w-48">
+                                    รายได้รวมทั้งหมด
+                                </th>
+                                <td className="py-2 px-3 font-semibold text-gray-900">
+                                    {summaryStats.totalAll.toLocaleString(
+                                        "th-TH"
+                                    )}{" "}
+                                    บาท
+                                </td>
+                            </tr>
+
+                            <tr className="border-t border-gray-200">
+                                <th className="py-2 px-3 font-medium text-gray-600">
+                                    รายได้โต๊ะ SNOOKER
+                                </th>
+                                <td className="py-2 px-3 font-semibold text-gray-900">
+                                    {summaryStats.totalSnooker.toLocaleString(
+                                        "th-TH"
+                                    )}{" "}
+                                    บาท
+                                </td>
+                            </tr>
+
+                            <tr className="border-t border-gray-200">
+                                <th className="py-2 px-3 font-medium text-gray-600">
+                                    รายได้โต๊ะ POOL
+                                </th>
+                                <td className="py-2 px-3 font-semibold text-gray-900">
+                                    {summaryStats.totalPool.toLocaleString(
+                                        "th-TH"
+                                    )}{" "}
+                                    บาท
+                                </td>
+                            </tr>
+
+                            <tr className="border-t border-gray-200">
+                                <th className="py-2 px-3 font-medium text-gray-600">
+                                    จำนวนการจองที่ดึงมา
+                                </th>
+                                <td className="py-2 px-3 font-semibold text-gray-900">
+                                    {summaryStats.totalReservations.toLocaleString(
+                                        "th-TH"
+                                    )}{" "}
+                                    ครั้ง
+                                </td>
+                            </tr>
+
+                            <tr className="border-t border-gray-200 border-b">
+                                <th className="py-2 px-3 font-medium text-gray-600">
+                                    โต๊ะทำเงินสูงสุด
+                                </th>
+                                <td className="py-2 px-3 font-semibold text-gray-900">
+                                    {summaryStats.topTableNo == null
+                                        ? "—"
+                                        : `โต๊ะ ${summaryStats.topTableNo} (${summaryStats.topTableAmount.toLocaleString(
+                                            "th-TH"
+                                        )} บาท)`}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-            )}
+
+                <p className="text-[11px] text-gray-400 mt-3">
+                    *ตัวเลขนี้นับจากข้อมูลทั้งหมดที่ backend ส่งมาในครั้งล่าสุด
+                </p>
+            </div>
         </div>
     );
 }

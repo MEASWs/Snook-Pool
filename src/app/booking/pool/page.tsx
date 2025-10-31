@@ -223,8 +223,8 @@ export default function PoolPage() {
                                             }`}
                                         >
                                             {isAvailable
-                                                ? "Available"
-                                                : "Occupied"}
+                                                ? "จองได้"
+                                                : "ยังไม่ว่าง / ปิดซ่อมบำรุง"}
                                         </span>
                                     </div>
                                 </header>

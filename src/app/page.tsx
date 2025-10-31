@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import "./globals.css";
 
 type TableType = "POOL" | "SNOOKER";
 
@@ -17,8 +18,33 @@ export default function SmartroomLibrary() {
   const [snookerCount, setSnookerCount] = useState(0);
   const [tableLoading, setTableLoading] = useState(true);
 
-  // ---------- base API (จาก .env) ----------
-  // ใช้ NEXT_PUBLIC_API_DOMAIN ตามที่คุณกำหนดใน .env
+  // ---------- responsive header ----------
+  const [isMobile, setIsMobile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // ปิด dropdown ถ้าคลิกนอกกล่อง
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // detect mobile (<640px)
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 640);
+    }
+    handleResize(); // ตอน mount
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // ---------- base API ----------
   const API = process.env.NEXT_PUBLIC_API_DOMAIN as string;
 
   useEffect(() => {
@@ -68,17 +94,13 @@ export default function SmartroomLibrary() {
     }
   }, [API]);
 
-  const campuses: Array<{
-    key: TableType;
-    name: string;
-    rooms: number;
-    emoji: string;
-  }> = [
-    { key: "SNOOKER", name: "Snook", rooms: snookerCount, emoji: "🎱" },
-    { key: "POOL", name: "Pool", rooms: poolCount, emoji: "🎯" },
-  ];
-
   function handleBooking(type: TableType) {
+    const btn = document.getElementById("blue");
+    if (btn) {
+      btn.style.backgroundColor =
+        btn.style.backgroundColor === "gray" ? "royalblue" : "gray";
+    }
+    
     if (!isLoggedIn) {
       alert("กรุณาเข้าสู่ระบบก่อนทำการจอง");
       router.push("/login");
@@ -87,20 +109,33 @@ export default function SmartroomLibrary() {
     router.push(`/booking/${type.toLowerCase()}`);
   }
 
-  // ---------- Loading state ----------
-  if (tableLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-            <div className="flex justify-between items-center">
-              <h1
-                className="text-2xl sm:text-3xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
-                onClick={() => router.push("/")}
-              >
-                Snook & Pool
-              </h1>
+  function handleLogout() {
+    localStorage.removeItem("token");
+    setIsLoggedIn(false);
+    setWalletBalance(null);
+    setMenuOpen(false);
+    router.push("/logout");
+  }
 
+  // -------------------------------------------------
+  // HEADER component (ใช้ทั้งตอนโหลดและตอนปกติ)
+  // -------------------------------------------------
+  function HeaderBar({ loadingSkeleton = false }: { loadingSkeleton?: boolean }) {
+    return (
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          {/* ✅ เปลี่ยน layout: ตอนนี้มือถือก็เป็น row แล้ว */}
+          <div className="flex flex-row justify-between items-start sm:items-center gap-4 relative">
+            {/* Logo */}
+            <h1
+              className="text-2xl sm:text-3xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
+              onClick={() => router.push("/")}
+            >
+              Snook & Pool
+            </h1>
+
+            {/* ถ้า loading ให้โชว์ skeleton */}
+            {loadingSkeleton ? (
               <nav
                 aria-label="เมนูหลัก (กำลังโหลด)"
                 className="flex gap-3 items-center"
@@ -108,9 +143,249 @@ export default function SmartroomLibrary() {
                 <div className="h-10 w-24 rounded-xl bg-gray-200 animate-pulse" />
                 <div className="h-10 w-28 rounded-xl bg-gray-200 animate-pulse" />
               </nav>
-            </div>
+            ) : (
+              <nav
+                aria-label="เมนูหลัก"
+                className="flex flex-col sm:flex-row gap-3 items-end sm:items-center"
+              >
+                {!isLoggedIn ? (
+                  // ----------------- ผู้ใช้ยังไม่ล็อกอิน -----------------
+                  <>
+                    <button
+                      onClick={() => router.push("/login")}
+                      className="px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white text-sm sm:text-base rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                      aria-label="เข้าสู่ระบบ"
+                    >
+                      เข้าสู่ระบบ
+                    </button>
+
+                    <button
+                      onClick={() => router.push("/register")}
+                      className="px-4 sm:px-6 py-2 sm:py-2.5 bg-green-600 text-white text-sm sm:text-base rounded-xl hover:bg-green-700 transition-colors font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                      aria-label="สมัครสมาชิก"
+                    >
+                      สมัครสมาชิก
+                    </button>
+                  </>
+                ) : (
+                  // ----------------- ผู้ใช้ล็อกอินแล้ว -----------------
+                  <>
+                    {isMobile ? (
+                      // ===== MOBILE MODE -> ปุ่มเมนูอันเดียว + dropdown =====
+                      <div className="relative" ref={menuRef}>
+                        {/* ปุ่มเมนู ขวาสุดของ header แล้ว */}
+                        <button
+                          onClick={() => setMenuOpen((o) => !o)}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          aria-haspopup="true"
+                          aria-expanded={menuOpen}
+                          aria-label="เมนูผู้ใช้"
+                        >
+                          <span className="font-semibold text-sm sm:text-base">
+                            เมนู
+                          </span>
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 12H6.01M12 12h.01M18 12h.01"
+                            />
+                          </svg>
+                        </button>
+
+                        {/* dropdown จะชิดขวาของปุ่ม เพราะเราย้ายปุ่มไปขวาแล้ว */}
+                        {menuOpen && (
+                          <div
+                            role="menu"
+                            className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-3 px-4 z-50"
+                          >
+                            {/* Wallet row */}
+                            <div className="flex items-start gap-3">
+                              <div className="text-2xl leading-none" aria-hidden="true">
+                                💰
+                              </div>
+
+                              <div className="flex-1">
+                                <div className="text-[0.7rem] text-gray-500 font-medium uppercase tracking-wide">
+                                  Wallet
+                                </div>
+                                <div className="text-lg font-bold text-gray-900">
+                                  {walletBalance !== null
+                                    ? `฿${walletBalance.toLocaleString("en-US")}`
+                                    : "…"}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  setMenuOpen(false);
+                                  router.push("/topup");
+                                }}
+                                className="text-xs font-semibold bg-blue-600 text-white px-2 py-1 rounded-lg hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 hover:scale-105 transition-all"
+                              >
+                                เติม
+                              </button>
+                            </div>
+
+                            {/* เส้นคั่น */}
+                            <hr className="my-3 border-gray-200" />
+
+                            {/* ดูการจองของฉัน */}
+                            <button
+                              onClick={() => {
+                                setMenuOpen(false);
+                                router.push("/reservationlist");
+                              }}
+                              className="w-full flex items-start gap-3 text-left rounded-lg px-2 py-2 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              role="menuitem"
+                            >
+                              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 7h18M3 12h18M3 17h18"
+                                  />
+                                </svg>
+                              </div>
+
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-gray-900">
+                                  ดูการจองของฉัน
+                                </span>
+                                <span className="text-xs text-gray-500 leading-snug">
+                                  ดูเวลาเริ่ม / ยอดที่ต้องจ่าย
+                                </span>
+                              </div>
+                            </button>
+
+                            {/* ออกจากระบบ */}
+                            <button
+                              onClick={handleLogout}
+                              className="mt-2 w-full flex items-start gap-3 text-left rounded-lg px-2 py-2 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                              role="menuitem"
+                            >
+                              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-red-100 text-red-600">
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h5a2 2 0 012 2v1"
+                                  />
+                                </svg>
+                              </div>
+
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-red-600">
+                                  ออกจากระบบ
+                                </span>
+                                <span className="text-xs text-gray-500 leading-snug">
+                                  กลับไปหน้าเริ่มต้น
+                                </span>
+                              </div>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      // ===== DESKTOP MODE -> แยกปุ่มตามดีไซน์เดิม =====
+                      <>
+                        {/* Wallet block */}
+                        <section
+                          aria-label="ยอดเงินในวอลเล็ต"
+                          className="flex items-center gap-2 bg-gray-100 text-gray-800 rounded-xl px-4 py-2 shadow-sm border border-gray-200"
+                        >
+                          <div className="text-xl leading-none" aria-hidden="true">
+                            💰
+                          </div>
+
+                          <div className="flex flex-col leading-tight">
+                            <span className="text-[0.7rem] text-gray-500 font-medium uppercase tracking-wide">
+                              Wallet
+                            </span>
+
+                            <span className="text-sm font-bold text-gray-900">
+                              {walletBalance !== null
+                                ? `฿${walletBalance.toLocaleString("en-US")}`
+                                : "…"}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => router.push(`/topup`)}
+                            className="ml-2 text-xs font-semibold bg-blue-600 text-white px-2 py-1 rounded-lg hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 hover:scale-105 transition-all"
+                          >
+                            เติม
+                          </button>
+                        </section>
+
+                        {/* ดูการจองของฉัน */}
+                        <button
+                          onClick={() => router.push("/reservationlist")}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          aria-label="ดูการจองของฉัน"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M3 7h18M3 12h18M3 17h18"
+                            />
+                          </svg>
+                          ดูการจองของฉัน
+                        </button>
+
+                        {/* logout */}
+                        <button
+                          onClick={handleLogout}
+                          className="px-4 sm:px-6 py-2 sm:py-2.5 bg-red-600 text-white text-sm sm:text-base rounded-xl hover:bg-red-700 hover:scale-105 transition-all font-semibold shadow-sm duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                          aria-label="ออกจากระบบ"
+                        >
+                          ออกจากระบบ
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </nav>
+            )}
           </div>
-        </header>
+        </div>
+      </header>
+    );
+  }
+
+  // ---------- Loading state ----------
+  if (tableLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <HeaderBar loadingSkeleton />
 
         <main
           role="main"
@@ -168,108 +443,7 @@ export default function SmartroomLibrary() {
   // ---------- Normal UI ----------
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-            <h1
-              className="text-2xl sm:text-3xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
-              onClick={() => router.push("/")}
-            >
-              Snook & Pool
-            </h1>
-
-            <nav
-              aria-label="เมนูหลัก"
-              className="flex flex-col sm:flex-row gap-3 items-start sm:items-center"
-            >
-              {isLoggedIn ? (
-                <>
-                  <section
-                    aria-label="ยอดเงินในวอลเล็ต"
-                    className="flex items-center gap-2 bg-gray-100 text-gray-800 rounded-xl px-4 py-2 shadow-sm border border-gray-200"
-                  >
-                    <div className="text-xl leading-none" aria-hidden="true">
-                      💰
-                    </div>
-
-                    <div className="flex flex-col leading-tight">
-                      <span className="text-[0.7rem] text-gray-500 font-medium uppercase tracking-wide">
-                        Wallet
-                      </span>
-
-                      <span className="text-sm font-bold text-gray-900">
-                        {walletBalance !== null
-                          ? `฿${walletBalance.toLocaleString("en-US")}`
-                          : "…"}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => router.push(`/topup`)}
-                      className="ml-2 text-xs font-semibold bg-blue-600 text-white px-2 py-1 rounded-lg hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 hover:scale-105 transition-all"
-                    >
-                      เติม
-                    </button>
-                  </section>
-
-                  <button
-                    onClick={() => router.push("/reservationlist")}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    aria-label="ดูการจองของฉัน"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 7h18M3 12h18M3 17h18"
-                      />
-                    </svg>
-                    ดูการจองของฉัน
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem("token");
-                      setIsLoggedIn(false);
-                      setWalletBalance(null);
-                      router.push("/logout");
-                    }}
-                    className="px-4 sm:px-6 py-2 sm:py-2.5 bg-red-600 text-white text-sm sm:text-base rounded-xl hover:bg-red-700 hover:scale-105 transition-all font-semibold shadow-sm duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                    aria-label="ออกจากระบบ"
-                  >
-                    ออกจากระบบ
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => router.push("/login")}
-                    className="px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white text-sm sm:text-base rounded-xl hover:bg-blue-700 transition-colors font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    aria-label="เข้าสู่ระบบ"
-                  >
-                    เข้าสู่ระบบ
-                  </button>
-
-                  <button
-                    onClick={() => router.push("/register")}
-                    className="px-4 sm:px-6 py-2 sm:py-2.5 bg-green-600 text-white text-sm sm:text-base rounded-xl hover:bg-green-700 transition-colors font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-                    aria-label="สมัครสมาชิก"
-                  >
-                    สมัครสมาชิก
-                  </button>
-                </>
-              )}
-            </nav>
-          </div>
-        </div>
-      </header>
+      <HeaderBar />
 
       <main
         id="main"
@@ -286,10 +460,7 @@ export default function SmartroomLibrary() {
             </div>
           </div>
 
-          <h2
-            id="choose-type-title"
-            className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 px-4"
-          >
+          <h2 id="choose-type-title" className="selecttable">
             เลือกประเภทโต๊ะที่ต้องการจอง
           </h2>
 
@@ -353,8 +524,11 @@ export default function SmartroomLibrary() {
                 </section>
 
                 <button
-                  onClick={() => handleBooking(campus.key)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 hover:scale-105 text-white font-semibold py-3 sm:py-4 px-6 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  onClick={() => {
+                    handleBooking(campus.key);
+                  }}
+                  type="button"
+                  id="blue"
                   aria-label={`จองโต๊ะประเภท ${campus.name}`}
                 >
                   จองโต๊ะ {campus.name}

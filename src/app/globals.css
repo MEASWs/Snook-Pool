@@ -1,5 +1,60 @@
 @import "tailwindcss";
 
-body {
-  background-color: #f8f8f8;
+/* class */
+.selecttable {
+    font-size:xx-large;       
+    font-weight: 700;      
+    color: #111827;       
+    margin-bottom: 0.5rem;  
+    padding-left: 1rem;  
+    padding-right: 1rem;
 }
+
+/* Universa */
+*:hover {
+  cursor: pointer;
+}
+
+/* type */
+p {
+  color: rgb(143, 143, 143);
+}
+
+/* id */
+#blue {
+  width: 100%; 
+  color: white; 
+  background-color: blue; 
+  font-weight: 600; 
+  padding-top: 10px;  
+  padding-bottom: 15px;
+  padding-left: 1.5rem;  
+  padding-right: 1.5rem;
+  border-radius: 0.75rem; 
+  transition: all 0.2s ease; 
+}
+
+/* Pseudo-Class + Attributes Selector*/
+button[type="button"]:hover {
+  background-color: #1d4ed8;
+  transform: scale(1.05);
+}
+
+/* Pseudo-Element */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(29, 78, 216, 0.4);
+  backdrop-filter: blur(4px); /* เพิ่มความเบลอ */
+  opacity: 0;
+  transition: opacity 0.3s, backdrop-filter 0.3s;
+}
+.card:hover::before {
+  opacity: 1;
+  backdrop-filter: blur(6px);
+}
+
+
+
+

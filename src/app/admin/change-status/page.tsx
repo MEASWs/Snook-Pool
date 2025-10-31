@@ -39,12 +39,16 @@ export default function AdminChangeReservationStatusPage() {
     const [loadingList, setLoadingList] = useState(true);
     const [loadListErr, setLoadListErr] = useState<string | null>(null);
 
+    // 🆕 state สำหรับสถานะลบเฉพาะอันที่กำลังโดนลบ เพื่อ disable ปุ่ม
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
     const router = useRouter();
 
     // ---------- CONFIG ----------
     const API = process.env.NEXT_PUBLIC_API_DOMAIN || "http://localhost:3001";
     const PATCH_URL = `${API}/api/v1/admin/authorized/reservations`;
     const LIST_URL = `${API}/api/v1/admin/authorized/reservations`;
+    const DELETE_URL = `${API}/api/v1/admin/authorized/reservations`; // /:id (DELETE)
 
     // ---------- HELPERS ----------
     function fmtThai(dtISO?: string | null) {
@@ -161,7 +165,6 @@ export default function AdminChangeReservationStatusPage() {
                 const msg = parsed?.message
                     ? `❌ ${res.status} ${res.statusText}: ${parsed.message}`
                     : `❌ ${res.status} ${res.statusText}: ${raw}`;
-
                 setServerMsg(msg);
                 setLoading(false);
                 return;
@@ -169,11 +172,81 @@ export default function AdminChangeReservationStatusPage() {
 
             setServerMsg("✅ " + (parsed?.message ?? "Success"));
             setServerJson(parsed?.data ?? null);
+
+            // อัปเดต list ใน sidebar ให้ status เปลี่ยนทันทีแบบ optimistic
+            setRecentReservations((prev) =>
+                prev.map((item) =>
+                    item.id === reservationId
+                        ? { ...item, status: nextStatus }
+                        : item
+                )
+            );
         } catch (err: any) {
             console.error("Fetch error:", err);
             setServerMsg("❌ Network / Client Error");
         } finally {
             setLoading(false);
+        }
+    }
+
+    // ---------- DELETE RESERVATION ----------
+    async function deleteReservation(id: string) {
+        // reset msg ก่อน เพื่อให้เห็นผลลบล่าสุด
+        setServerMsg(null);
+        setServerJson(null);
+
+        const token = localStorage.getItem("token");
+        if (!token) {
+            setServerMsg("❌ Unauthorized: no admin token. Please login again.");
+            return;
+        }
+
+        // mark กำลังลบปุ่มนี้ -> ปุ่มนี้จะ disabled
+        setDeletingId(id);
+
+        try {
+            const res = await fetch(`${DELETE_URL}/${id}`, {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            const raw = await res.text();
+            let parsed: any = null;
+            try {
+                parsed = JSON.parse(raw);
+            } catch {}
+
+            if (!res.ok) {
+                const msg = parsed?.message
+                    ? `❌ ${res.status} ${res.statusText}: ${parsed.message}`
+                    : `❌ ${res.status} ${res.statusText}: ${raw}`;
+
+                setServerMsg(msg);
+                setDeletingId(null);
+                return;
+            }
+
+            //ตามสเปค:
+            // {
+            //   "ok": true,
+            //   "message": "Deleted",
+            //   "id": "1a96f0aa-6131-4abb-a0a9-412936045120"
+            // }
+
+            setServerMsg("✅ ลบสำเร็จ: " + (parsed?.message || "Deleted"));
+
+            // ตัดตัวที่ถูกลบออกจาก recentReservations
+            setRecentReservations((prev) => prev.filter((r) => r.id !== id));
+
+            // ถ้า form ข้างซ้ายกำลังถือ id เดียวกันอยู่ ให้เคลียร์ด้วยกันไปเลย
+            setReservationId((curr) => (curr === id ? "" : curr));
+        } catch (err: any) {
+            console.error("Delete error:", err);
+            setServerMsg("❌ Network / Client Error");
+        } finally {
+            setDeletingId(null);
         }
     }
 
@@ -418,25 +491,46 @@ export default function AdminChangeReservationStatusPage() {
                                                 key={r.id}
                                                 className="border border-gray-200 rounded-xl p-3 hover:shadow-md transition-shadow bg-gray-50"
                                             >
-                                                {/* ID + ปุ่มใช้ */}
+                                                {/* ID + ปุ่มใช้ + ปุ่มลบ */}
                                                 <div className="flex items-start justify-between gap-2 mb-2">
                                                     <div className="font-mono text-[10px] text-gray-600 break-all flex-1">
                                                         {r.id}
                                                     </div>
+
+                                                    {/* ปุ่มลบ */}
+                                                    <button
+                                                        className={`text-[10px] px-2 py-1 rounded-lg whitespace-nowrap flex-shrink-0 font-semibold transition
+                                                            ${
+                                                                deletingId === r.id
+                                                                    ? "bg-gray-400 text-white cursor-wait"
+                                                                    : "bg-red-600 text-white hover:bg-red-700"
+                                                            }`}
+                                                        disabled={deletingId === r.id}
+                                                        onClick={() => {
+                                                            // ยืนยันก่อนลบ (confirm ของ browser ง่ายๆ)
+                                                            const ok = window.confirm(
+                                                                "⚠ ลบการจองนี้ถาวร?\n(จะหายออกจากระบบ)"
+                                                            );
+                                                            if (!ok) return;
+                                                            deleteReservation(r.id);
+                                                        }}
+                                                    >
+                                                        {deletingId === r.id
+                                                            ? "กำลังลบ..."
+                                                            : "ลบ"}
+                                                    </button>
+
+                                                    {/* ปุ่มใช้ */}
                                                     <button
                                                         className="text-[10px] px-2 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap flex-shrink-0"
                                                         onClick={() => {
                                                             // auto-fill form
                                                             setReservationId(r.id);
 
-                                                            // smart default nextStatus
-                                                            // ถ้ายังไม่ confirm -> set เป็น CONFIRMED
-                                                            // ถ้า confirm แล้ว -> set เป็น COMPLETED
+                                                            // smart default nextStatus:
                                                             if (r.status === "PENDING") {
                                                                 setNextStatus("CONFIRMED");
-                                                            } else if (
-                                                                r.status === "CONFIRMED"
-                                                            ) {
+                                                            } else if (r.status === "CONFIRMED") {
                                                                 setNextStatus("COMPLETED");
                                                             }
                                                         }}
@@ -484,9 +578,7 @@ export default function AdminChangeReservationStatusPage() {
                                                 {r.startTime && (
                                                     <div className="text-[10px] text-gray-500 flex items-center gap-1">
                                                         <span>🕐</span>
-                                                        <span>
-                                                            {fmtThai(r.startTime)}
-                                                        </span>
+                                                        <span>{fmtThai(r.startTime)}</span>
                                                     </div>
                                                 )}
                                             </div>

@@ -161,10 +161,8 @@ export default function AdminHome() {
             <header className="bg-white shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <h1
-                            className="text-2xl sm:text-3xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-2"
-                            onClick={() => handleNavigation("/admin")}
-                        >
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-2"
+                            onClick={() => handleNavigation("/admin")}>
                             <span className="text-3xl">⚙️</span>
                             Admin Panel
                         </h1>
@@ -174,8 +172,7 @@ export default function AdminHome() {
                                     localStorage.removeItem("token");
                                     handleNavigation("/login");
                                 }}
-                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl font-semibold transition-colors shadow-sm text-sm sm:text-base"
-                            >
+                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl font-semibold transition-colors shadow-sm text-sm sm:text-base">
                                 🚪 Logout
                             </button>
                         </nav>
